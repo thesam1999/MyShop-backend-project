@@ -1,0 +1,124 @@
+Folder PATH listing for volume Windows-SSD
+Volume serial number is 0A40-0770
+C:.
+│   structure.txt
+│   
+├───java
+│   └───com
+│       └───sideproject
+│           └───myshop
+│               │   MyshopApplication.java
+│               │   
+│               ├───auth
+│               │   ├───config
+│               │   │       JWTAuthenticationFilter.java
+│               │   │       JWTAuthenticationToken.java
+│               │   │       WebSecurityConfig.java
+│               │   │       
+│               │   ├───controller
+│               │   │       AuthController.java
+│               │   │       OAuth2Controller.java
+│               │   │       UserDetailController.java
+│               │   │       
+│               │   ├───dto
+│               │   │       ApiErrorResponse.java
+│               │   │       LoginRequest.java
+│               │   │       RegistrationRequest.java
+│               │   │       RegistrationResponse.java
+│               │   │       UserDetailsDto.java
+│               │   │       UserToken.java
+│               │   │       
+│               │   ├───entities
+│               │   │       Authority.java
+│               │   │       User.java
+│               │   │       
+│               │   ├───exceptions
+│               │   │       RESTAuthenticationEntryPoint.java
+│               │   │       
+│               │   ├───helper
+│               │   │       JWTTokenHelper.java
+│               │   │       VerificationCodeGenerator.java
+│               │   │       
+│               │   ├───repositories
+│               │   │       AuthorityRepository.java
+│               │   │       UserDetailRepository.java
+│               │   │       
+│               │   └───services
+│               │           AuthorityService.java
+│               │           CustomUserDetailService.java
+│               │           EmailService.java
+│               │           OAuth2Service.java
+│               │           RegistrationService.java
+│               │           
+│               ├───config
+│               │       SwaggerConfig.java
+│               │       
+│               ├───controllers
+│               │       AddressController.java
+│               │       CategoryController.java
+│               │       FileUpload.java
+│               │       OrderController.java
+│               │       ProductController.java
+│               │       TestController.java
+│               │       
+│               ├───dto
+│               │       AddressRequest.java
+│               │       CategoryDto.java
+│               │       CategoryTypeDto.java
+│               │       ExceptionResponse.java
+│               │       OrderDetails.java
+│               │       OrderItemDetail.java
+│               │       OrderItemRequest.java
+│               │       OrderRequest.java
+│               │       OrderResponse.java
+│               │       ProductDto.java
+│               │       ProductResourceDto.java
+│               │       ProductVariantDto.java
+│               │       
+│               ├───entities
+│               │       Address.java
+│               │       Category.java
+│               │       CategoryType.java
+│               │       Order.java
+│               │       OrderItem.java
+│               │       OrderStatus.java
+│               │       Payment.java
+│               │       PaymentStatus.java
+│               │       Product.java
+│               │       ProductVariant.java
+│               │       Resources.java
+│               │       
+│               ├───exceptions
+│               │       GlobalExceptionHandler.java
+│               │       InternalServerException.java
+│               │       PaymentFailedException.java
+│               │       ResourceNotFoundEx.java
+│               │       
+│               ├───mapper
+│               │       CategoryMapper.java
+│               │       OrderMapper.java
+│               │       ProductMapper.java
+│               │       
+│               ├───repositories
+│               │       AddressRepository.java
+│               │       CategoryRepository.java
+│               │       OrderRepository.java
+│               │       ProductRepository.java
+│               │       
+│               ├───services
+│               │       AddressService.java
+│               │       CategoryService.java
+│               │       FileUploadService.java
+│               │       OrderService.java
+│               │       PaymentIntentService.java
+│               │       ProductService.java
+│               │       ProductServiceImpl.java
+│               │       
+│               └───specification
+│                       ProductSpecification.java
+│                       
+└───resources
+    │   application.properties
+    │   
+    ├───static
+    └───templates
