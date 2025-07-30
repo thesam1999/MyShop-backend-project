@@ -13,10 +13,10 @@
 
 
 ## 目錄
+- [🌐 RESTful API](#-restful-api)
 - [📌 資料庫結構簡介](#-資料庫結構簡介)
 - [🔗 關聯設計](#-關聯設計)
 - [📦 DTO(資料傳輸物件)](#-DTO資料傳輸物件)
-- [🌐 RESTful API](#-restful-api)
 - [🖼️ 畫面展示](#-畫面展示)
 
 
@@ -175,6 +175,121 @@
 ---
 
 
+## 🌐 RESTful API
+
+撰寫 `GlobalExceptionHandler` 類別透過  `@RestControllerAdvice` 監聽 Controller 層級例外，當觸發例外時，回傳指定狀態碼與固定JSON錯誤訊息：
+1. `ResourceNotFoundEx` 例外，回傳狀態碼 404，error："Resource Not Found in Database"
+2. `InternalServerException` 例外，回傳狀態碼 500，error："Internal Server Error"
+3. `PaymentFailedException` 例外，回傳狀態碼 400，error："Payment Failed"
+4. `IllegalArgumentException` 例外，回傳狀態碼 400，error："Invalid Argument"
+5. `BadRequestException` 例外，回傳狀態碼400，error："Bad Request"
+6. 其他例外，回傳狀態碼 500，error："Something Went Wrong"
+
+
+
+
+### User
+- `POST /api/auth/register`：
+  用戶註冊，將信箱與密碼(Bcrypt加密)存入資料庫，預設給予 `USER` 權限，寄送驗證碼到使用者信箱(資料庫 `enabled` 欄位，預設 `false`)。
+    - 若帳號已存在且完成信箱驗證返回 `400 BAD_REQUEST`；
+    - 若帳號已存在，未完成信箱驗證，更新資料庫驗證碼重新寄送。
+
+
+- `POST /api/auth/verify` ： 使用者輸入驗證碼進行信箱驗證，驗證成功後將 `enabled` 欄位改為 `true` ；驗證失敗，回傳 `400 BAD_REQUEST` 。
+
+
+- `POST /api/auth/login` ： 用戶登入，檢查是否完成信箱驗證(`enabled = true`)
+    - 若已驗證則生成JWT(一小時到期)。
+    - 若未信箱驗證或使用者名稱或密碼輸入錯誤，回傳`401 UNAUTHORIZED`
+
+
+- `GET /oauth2/success` ： 用戶透過Google第三方登入後，後端利用 `@AuthenticationPrincipal OAuth2User` 取得email：
+    - 若 email 對應的帳號已存在，則產生JWT，重新導向前端頁面，於 URL 上夾帶token。
+    - 若未註冊過，使用email創建一個新用戶，再完成上述動作。
+
+
+- `GET /api/user/profile` ： 使用者登入後，透過 `Principal` 類別取得使用者名稱，從資料庫查詢並回船使用者資料。若找不到使用者資料，回傳 `401 UNAUTHORIZED`
+
+
+- `POST /api/address` ： 創建使用者地址
+- `DELETE /api/address/{id}` ： 透過地址id刪除地址
+
+### Order
+
+- `POST /api/order` ： 創建訂單，同時建立詳細付款資訊(付款狀態pending)並關聯至該筆訂單，透過 `@Transactional` 確保訂單操作資料庫上的原子性。
+    - 若沒提供地址，拋出 `ResourceNotFoundEx`
+    - 若付款方式為信用卡，回傳 Stripe 的 `client_secret` ，供前端進行付款流程
+
+
+- `PUT /api/order/update-payment` ： 使用者信用卡付款完成後，從Stripe取得付款資訊，並更新資料庫的訂單狀態及付款資訊。處理邏輯如下：
+    1. **查詢付款資訊：** 透過 `paymentIntentId` 向Stripe API查詢付款詳細內容
+        - 使用 `PaymentIntent.retrieve(paymentIntentId)` 向 Stripe API 查詢付款詳細內容。
+        - 若查不到此筆付款（可能是 id 錯誤或已被刪除），拋出 `IllegalArgumentException`
+    2. **驗證付款狀態：** 確認付款狀態為 `succeeded`
+        - 若付款尚未成功，則拋出自定義例外 `PaymentFailedException`，表示付款流程尚未成功，後續無須更新訂單。
+    3. **取得 orderId：** 從 Stripe `PaymentIntent `的 `metadata` 欄位中取得 `orderId`。
+        - 這個欄位是在建立付款 `PaymentIntent` 時手動加上的附加資料。
+        - 若找不到對應的 `orderId`，拋出 `BadRequestException`，提示 Stripe metadata 配置有誤。
+    4. **查詢訂單：** 根據 `orderId` 查詢訂單資料庫
+        - 若找不到對應的訂單，代表使用者付款的訂單有誤，拋出 `ResourceNotFoundEx`。
+    5. **更新付款資訊：** 更新付款資訊（如狀態、付款方式）
+        - 透過已關聯的 `Payment` 實體，更新其付款狀態與方式。
+        - 關聯關係是既有的，因此不重新設定 `order.setPayment(...)`。
+    6. **更新訂單狀態：** 更新訂單本身的狀態與付款方式
+        - 將訂單狀態更新為 `IN_PROGRESS`
+        - 使用`paymentIntent.getPaymentMethod()`，取得 `PaymentMethod` 物件的ID，並設定到 `payment` 資料表的 `paymentMethod` 欄位，以記錄付款來源
+    7. **回傳結果：** 儲存更新後的訂單，並回傳包含訂單 ID 的 Map 給前端
+        - 成功後回傳 `Map<String, String>`，其中包含 orderId 作為成功確認資料。
+
+
+
+- `PUT /api/order/{id}` ： 根據 id 取得訂單。並透過 `Principal` 驗證使用者身份。 將該筆訂單的 `OrderStatus` 欄位更新為 CANCELED。
+    - 若 id 找不到訂單，拋出 `ResourceNotFoundEx`
+
+
+- `GET /api/order/user` ： 使用 `Principal` 取得使用者建立的所有訂單，並回傳給前端。
+
+### Product
+
+- `GET /api/products` ： 根據前端傳來的查詢參數，使用 `Specification` 動態組合查詢條件：
+    1. 若有 `slug` ，直接依據 `slug` 查詢並回傳單一商品。
+    2. 如果沒有 `slug`，則依據 `categoryId`（分類）與 `typeId`（商品類型）進行條件式查詢，可單獨或同時使用。
+    3. 若三個參數都沒傳，則回傳所有商品。
+
+
+- `GET /api/products/{id}` ： 透過商品 id ，取得商品資訊。 找不到商品拋出 `ResourceNotFoundEx` 例外
+
+
+- `POST /api/products/` ： 創建一筆新商品，同時新增多個商品款式(不同顏色、尺寸)以及多個商品圖片(`Product_Resource`)。
+
+
+
+- `PUT /api/products/{id}` ：透過商品 id 更新商品的資料(前端透過一同回傳舊的資料)。若找不到拋出 `ResourceNotFoundEx` 。
+
+
+### Category
+
+- `GET /api/category` ： 取得所有商品分類(男生、女生)，及該分類底下的各類型商品資料(T-shirt、Hoodie)
+
+
+- `GET /api/category/{id}` ： 透過分類id取得特定分類，及該分類下的各類型商品資料
+    - 若找不到拋出 `ResourceNotFoundEx` 例外
+
+- `POST /api/category` ： 新增一個商品分類(男生、女生)，同時可新增該類下的商品類型(T-shirt, Hoodie)
+
+
+- `PUT /api/category/{id}` ： 透過分類id更新分類資料，並可同時更新分類底下的商品類型資料(T-shirt, Hoodie)
+    - 若查無此分類，拋出 `ResourceNotFoundEx` 例外
+
+
+- `DELETE /api/category/{id}` ： 刪除指定分類，同時刪除分類底下的關聯商品類型
+
+
+
+
+
+---
+
 ## 📌 資料庫結構簡介
 
 <p>
@@ -286,120 +401,7 @@
 
 ---
 
-## 🌐 RESTful API
 
-撰寫 `GlobalExceptionHandler` 類別透過  `@RestControllerAdvice` 監聽 Controller 層級例外，當觸發例外時，回傳指定狀態碼與固定JSON錯誤訊息：
-1. `ResourceNotFoundEx` 例外，回傳狀態碼 404，error："Resource Not Found in Database"
-2. `InternalServerException` 例外，回傳狀態碼 500，error："Internal Server Error"
-3. `PaymentFailedException` 例外，回傳狀態碼 400，error："Payment Failed"
-4. `IllegalArgumentException` 例外，回傳狀態碼 400，error："Invalid Argument"
-5. `BadRequestException` 例外，回傳狀態碼400，error："Bad Request"
-6. 其他例外，回傳狀態碼 500，error："Something Went Wrong"
-
-
-
-
-### User
-- `POST /api/auth/register`：
-用戶註冊，將信箱與密碼(Bcrypt加密)存入資料庫，預設給予 `USER` 權限，寄送驗證碼到使用者信箱(資料庫 `enabled` 欄位，預設 `false`)。
-  - 若帳號已存在且完成信箱驗證返回 `400 BAD_REQUEST`；
-  - 若帳號已存在，未完成信箱驗證，更新資料庫驗證碼重新寄送。
-  
-
-- `POST /api/auth/verify` ： 使用者輸入驗證碼進行信箱驗證，驗證成功後將 `enabled` 欄位改為 `true` ；驗證失敗，回傳 `400 BAD_REQUEST` 。 
-
-
-- `POST /api/auth/login` ： 用戶登入，檢查是否完成信箱驗證(`enabled = true`)
-  - 若已驗證則生成JWT(一小時到期)。
-  - 若未信箱驗證或使用者名稱或密碼輸入錯誤，回傳`401 UNAUTHORIZED`
-
-
-- `GET /oauth2/success` ： 用戶透過Google第三方登入後，後端利用 `@AuthenticationPrincipal OAuth2User` 取得email：
-  - 若 email 對應的帳號已存在，則產生JWT，重新導向前端頁面，於 URL 上夾帶token。
-  - 若未註冊過，使用email創建一個新用戶，再完成上述動作。
-  
-    
-- `GET /api/user/profile` ： 使用者登入後，透過 `Principal` 類別取得使用者名稱，從資料庫查詢並回船使用者資料。若找不到使用者資料，回傳 `401 UNAUTHORIZED`
-
-
-- `POST /api/address` ： 創建使用者地址
-- `DELETE /api/address/{id}` ： 透過地址id刪除地址
-
-### Order
-
-- `POST /api/order` ： 創建訂單，同時建立詳細付款資訊(付款狀態pending)並關聯至該筆訂單，，透過 `@Transactional` 確保訂單操作資料庫上的原子性。
-    - 若沒提供地址，拋出 `ResourceNotFoundEx`
-    - 若付款方式為信用卡，回傳 Stripe 的 `client_secret` ，供前端進行付款流程
-
-
-- `PUT /api/order/update-payment` ： 使用者信用卡付款完成後，從Stripe取得付款資訊，並更新資料庫的訂單狀態及付款資訊。處理邏輯如下：
-    1. **查詢付款資訊：** 透過 `paymentIntentId` 向Stripe API查詢付款詳細內容
-        - 使用 `PaymentIntent.retrieve(paymentIntentId)` 向 Stripe API 查詢付款詳細內容。
-        - 若查不到此筆付款（可能是 id 錯誤或已被刪除），拋出 `IllegalArgumentException`
-    2. **驗證付款狀態：** 確認付款狀態為 `succeeded`
-        - 若付款尚未成功，則拋出自定義例外 `PaymentFailedException`，表示付款流程尚未成功，後續無須更新訂單。
-    3. **取得 orderId：** 從 Stripe `PaymentIntent `的 `metadata` 欄位中取得 `orderId`。
-        - 這個欄位是在建立付款 `PaymentIntent` 時手動加上的附加資料。
-        - 若找不到對應的 `orderId`，拋出 `BadRequestException`，提示 Stripe metadata 配置有誤。
-    4. **查詢訂單：** 根據 `orderId` 查詢訂單資料庫
-        - 若找不到對應的訂單，代表使用者付款的訂單有誤，拋出 `ResourceNotFoundEx`。
-    5. **更新付款資訊：** 更新付款資訊（如狀態、付款方式）
-        - 透過已關聯的 `Payment` 實體，更新其付款狀態與方式。
-        - 關聯關係是既有的，因此不重新設定 `order.setPayment(...)`。
-    6. **更新訂單狀態：** 更新訂單本身的狀態與付款方式
-        - 將訂單狀態更新為 `IN_PROGRESS`
-        - 使用`paymentIntent.getPaymentMethod()`，取得 `PaymentMethod` 物件的ID，並設定到 `payment` 資料表的 `paymentMethod` 欄位，以記錄付款來源
-    7. **回傳結果：** 儲存更新後的訂單，並回傳包含訂單 ID 的 Map 給前端
-        - 成功後回傳 `Map<String, String>`，其中包含 orderId 作為成功確認資料。
-
-
-
-- `PUT /api/order/{id}` ： 根據 id 取得訂單。並透過 `Principal` 驗證使用者身份。 將該筆訂單的 `OrderStatus` 欄位更新為 CANCELED。
-    - 若 id 找不到訂單，拋出 `ResourceNotFoundEx`
-
-
-- `GET /api/order/user` ： 使用 `Principal` 取得使用者建立的所有訂單，並回傳給前端。
-
-### Product
-
-- `GET /api/products` ： 根據前端傳來的查詢參數，使用 `Specification` 動態組合查詢條件：
-    1. 若有 `slug` ，直接依據 `slug` 查詢並回傳單一商品。
-    2. 如果沒有 `slug`，則依據 `categoryId`（分類）與 `typeId`（商品類型）進行條件式查詢，可單獨或同時使用。
-    3. 若三個參數都沒傳，則回傳所有商品。
-
-
-- `GET /api/products/{id}` ： 透過商品 id ，取得商品資訊。 找不到商品拋出 `ResourceNotFoundEx` 例外
-
-
-- `POST /api/products/` ： 創建一筆新商品，同時新增多個商品款式(不同顏色、尺寸)以及多個商品圖片(`Product_Resource`)。
-
-
-
-- `PUT /api/products/{id}` ：透過商品 id 更新商品的資料(前端透過一同回傳舊的資料)。若找不到拋出 `ResourceNotFoundEx` 。
-
-
-### Category
-
-- `GET /api/category` ： 取得所有商品分類(男生、女生)，及該分類底下的各類型商品資料(T-shirt、Hoodie)
-
-
-- `GET /api/category/{id}` ： 透過分類id取得特定分類，及該分類下的各類型商品資料
-  - 若找不到拋出 `ResourceNotFoundEx` 例外
-
-- `POST /api/category` ： 新增一個商品分類(男生、女生)，同時可新增該類下的商品類型(T-shirt, Hoodie)
-
-
-- `PUT /api/category/{id}` ： 透過分類id更新分類資料，並可同時更新分類底下的商品類型資料(T-shirt, Hoodie)
-  - 若查無此分類，拋出 `ResourceNotFoundEx` 例外
-
-
-- `DELETE /api/category/{id}` ： 刪除指定分類，同時刪除分類底下的關聯商品類型
-
-
-
-
-
----
 
 # 🖼️ 畫面展示
 

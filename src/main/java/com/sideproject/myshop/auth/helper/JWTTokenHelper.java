@@ -23,7 +23,10 @@ import java.security.PrivateKey;
 import java.security.spec.PKCS8EncodedKeySpec;
 
 
-// 產生JWT 和驗證JWT
+// 產生JWT 和
+// 驗證JWT：
+//   從Token取得username，檢查資料庫是否存在這個user；token是否過期
+
 @Component
 public class JWTTokenHelper {
 
@@ -181,15 +184,13 @@ public class JWTTokenHelper {
     // 驗證token是否正確
     public Boolean validateToken(String token, UserDetails userDetails) {
         final String username = getUserNameFromToken(token);
-        return (
-                username != null &&
-                        username.equals(userDetails.getUsername()) &&
-                        !isTokenExpired(token)
-        );
+
+        return username != null && username.equals(userDetails.getUsername()) && !isTokenExpired(token)
+        ;
     }
 
     private boolean isTokenExpired(String token) {
-        Date expireDate=getExpirationDate(token);
+        Date expireDate = getExpirationDate(token);
         return expireDate.before(new Date());
     }
 

@@ -13,6 +13,13 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.io.IOException;
 
+
+/*
+使用者google登入後要進行什麼操作：
+從 OAuth2User 取得使用者帳號，
+存在：導航前端API，回傳JWT
+不存在：創一個新的帳號，執行上面操作
+ */
 @RestController
 @CrossOrigin
 @RequestMapping("/oauth2")

@@ -13,6 +13,9 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 import java.util.UUID;
 
+// category： 男生女生
+// category_type：商品類別
+
 @RestController
 @RequestMapping("api/category")
 @CrossOrigin

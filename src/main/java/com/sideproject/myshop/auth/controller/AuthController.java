@@ -22,6 +22,10 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
 
+/*
+註冊、登入、驗證的API
+ */
+
 @RestController
 @CrossOrigin
 @RequestMapping("api/auth")

@@ -35,6 +35,8 @@ public class JWTAuthenticationFilter extends OncePerRequestFilter {
                                     @NonNull HttpServletResponse response,
                                     @NonNull FilterChain filterChain) throws ServletException, IOException {
 
+        //  檢查Header是否為Authentication，如果不是代表不用進行JWT認證，直接放行進入下一個filter
+        // 檢查  是否已經完成JWT驗證(如果有就不用重新建一次Authentication，避免浪費資源)
         // 1️⃣ 讀取 Authorization 標頭的 JWT。
         // 2️⃣ 驗證這個 JWT 是否正確。
         // 3️⃣ 如果正確，就建立一個 UsernamePasswordAuthenticationToken，放進 SecurityContextHolder。
